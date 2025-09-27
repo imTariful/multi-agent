@@ -144,4 +144,5 @@ This script demonstrates querying the heart disease database for specific counts
 For questions or contributions, open an issue or pull request on GitHub.
 
 **Author**
+
 **Tariful Islam Tarif**
