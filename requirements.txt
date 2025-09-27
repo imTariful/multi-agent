@@ -1,8 +1,15 @@
 langchain>=0.1.0
-langchain-openai>=0.1.0
 langchain-community>=0.1.0
-openai>=1.0.0
+google-generativeai>=0.7.2
 pandas
 requests
 python-dotenv
 numpy
+pandas
+requests
+python-dotenv
+numpy
+google
+google-auth-oauthlib
+google-auth-httplib2
+  
