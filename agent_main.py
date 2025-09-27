@@ -3,15 +3,17 @@
 import os
 import argparse
 
-# Load CLI arg / .env before importing langchain so OPENAI_API_KEY is present
+# Load CLI arg / .env before importing langchain so GOOGLE_API_KEY is present
 parser = argparse.ArgumentParser(description="Run MultiToolAgent")
-parser.add_argument("--api-key", help="OpenAI API key (optional). If provided it will be set for this run.")
-parser.add_argument("--model", default="gpt-4o-mini", help="LLM model name to use (default: gpt-4o-mini)")
+parser.add_argument("--api-key", help="Gemini API key (optional). If provided it will be set for this run.")
+parser.add_argument("--model", default="gemini-1.5-flash", help="LLM model name to use (default: gemini-1.5-flash)")
+parser.add_argument("--once", action="store_true", help="Run once non-interactively and exit")
+parser.add_argument("--question", help="Question to run when using --once")
 args, _ = parser.parse_known_args()
 
 # If CLI key provided, set it in env for this process
 if args.api_key:
-    os.environ["OPENAI_API_KEY"] = args.api_key
+    os.environ["GOOGLE_API_KEY"] = args.api_key
 
 # Try to load .env if present (optional)
 try:
@@ -22,20 +24,20 @@ except Exception:
     pass
 
 # Quick check: ensure an API key exists before importing/initializing LLMs
-if "OPENAI_API_KEY" not in os.environ or not os.environ["OPENAI_API_KEY"]:
-    print("ERROR: OPENAI_API_KEY is not set. Provide it via --api-key, set the OPENAI_API_KEY env var, or add to a .env file.")
-    print("Example (PowerShell): $env:OPENAI_API_KEY='sk-...'; & .\\.venv\\Scripts\\python.exe .\\agent_main.py")
+if "GOOGLE_API_KEY" not in os.environ or not os.environ["GOOGLE_API_KEY"]:
+    print("ERROR: GOOGLE_API_KEY is not set. Provide it via --api-key, set the GOOGLE_API_KEY env var, or add to a .env file.")
+    print("Example (PowerShell): $env:GOOGLE_API_KEY='AIza...'; & .\\.venv\\Scripts\\python.exe .\\agent_main.py")
     raise SystemExit(1)
 
-# Now safe to import LangChain/OpenAI
+# Now safe to import LangChain/Gemini
 from tools.heart_disease_tool import HeartDiseaseDBTool
 from tools.cancer_tool import CancerDBTool
 from tools.diabetes_tool import DiabetesDBTool
 from tools.medical_web_search import MedicalWebSearchTool
 
-# Use LangChain stable imports
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage
+# Use LangChain Google Gemini
+from tools.gemini_llm import GeminiLLM
+from langchain_core.messages import SystemMessage, HumanMessage
 
 def _extract_text_from_resp(resp):
     """
@@ -73,15 +75,15 @@ def _extract_text_from_resp(resp):
     return str(resp)
 
 class MultiToolAgent:
-    def __init__(self, llm_model_name: str = "gpt-4o-mini"):
-        # instantiate tools (they may internally create their own ChatOpenAI instances)
-        self.heart_tool = HeartDiseaseDBTool(llm_model_name=llm_model_name)
-        self.cancer_tool = CancerDBTool(llm_model_name=llm_model_name)
-        self.diabetes_tool = DiabetesDBTool(llm_model_name=llm_model_name)
+    def __init__(self, llm_model_name: str = "gemini-1.5-flash", unsafe_mode: bool = True):
+        # instantiate tools (they may internally create their own LLM instances)
+        self.heart_tool = HeartDiseaseDBTool(llm_model_name=llm_model_name, unsafe_mode=unsafe_mode)
+        self.cancer_tool = CancerDBTool(llm_model_name=llm_model_name, unsafe_mode=unsafe_mode)
+        self.diabetes_tool = DiabetesDBTool(llm_model_name=llm_model_name, unsafe_mode=unsafe_mode)
         self.web_tool = MedicalWebSearchTool(llm_model_name=llm_model_name)
 
         # primary LLM used for routing/classification & short summaries
-        self.llm = ChatOpenAI(model_name=llm_model_name, temperature=0)
+        self.llm = GeminiLLM(model_name=llm_model_name, temperature=0)
 
     def _heuristic_route(self, question: str):
         q = question.lower()
@@ -147,14 +149,28 @@ class MultiToolAgent:
 
 if __name__ == "__main__":
     agent = MultiToolAgent(llm_model_name=args.model)
-    print("Agent ready. Type a question or 'quit' to exit.")
-    while True:
-        q = input("> ").strip()
+    if args.once:
+        q = args.question or ""
         if not q:
-            continue
-        if q.lower() in ("quit", "exit"):
-            break
+            # If no --question provided, try to read from stdin; if empty, exit
+            try:
+                q = input("").strip()
+            except EOFError:
+                q = ""
+        if not q:
+            print("No question provided for --once. Use --question \"...\".")
+            raise SystemExit(2)
         out = agent.handle(q)
-        print("\n--- Agent response ---")
         print(out)
-        print("\n----------------------\n")
+    else:
+        print("Agent ready. Type a question or 'quit' to exit.")
+        while True:
+            q = input("> ").strip()
+            if not q:
+                continue
+            if q.lower() in ("quit", "exit"):
+                break
+            out = agent.handle(q)
+            print("\n--- Agent response ---")
+            print(out)
+            print("\n----------------------\n")
